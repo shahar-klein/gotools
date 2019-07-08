@@ -9,6 +9,22 @@ import (
 	"github.com/safchain/ethtool"
 )
 
+func humanRead(bytes uint64) (string){
+
+
+        switch {
+                case bytes > 1000000000:
+                        return fmt.Sprintf("%.2f%s", float64(bytes)/1000000000, " G")
+                case bytes > 1000000:
+                        return fmt.Sprintf("%.2f%s", float64(bytes)/1000000, " M")
+                case bytes > 1000:
+                        return fmt.Sprintf("%.2f%s", float64(bytes)/1000, " K")
+        }
+
+	return fmt.Sprint(bytes)
+
+}
+
 
 func GetStats(e  *ethtool.Ethtool, name string) (uint64, uint64, uint64, uint64, uint64) {
 	stats, err := e.Stats(name)
@@ -53,8 +69,6 @@ func (self *OneIntf) do() {
 	self.tx_packets = stats["tx_packets"]
 	self.rx_drops   = stats["rx_out_of_buffer"]
 
-	//fmt.Printf("\033[0;0H")
-	//fmt.Println(self.display_rx_bytes, self.display_rx_packets, self.display_tx_bytes, self.display_tx_packets, self.display_rx_drops)
 
 
 }
@@ -62,6 +76,12 @@ func (self *OneIntf) do() {
 
 func (self *OneIntf) mainLoop() {
 	//init
+	e, err := ethtool.NewEthtool()
+	if err != nil {
+		panic(err.Error())
+	}
+	defer self.e.Close()
+	self.e = e
 	stats, err := self.e.Stats(self.intf)
 	self.rx_bytes   = stats["rx_bytes"]
 	self.rx_packets = stats["rx_packets"]
@@ -72,7 +92,6 @@ func (self *OneIntf) mainLoop() {
         if err != nil {
                 panic(err.Error())
         }
-
 	for {
 		go self.do()
 		time.Sleep(1000 * time.Millisecond)
@@ -91,18 +110,11 @@ func main() {
 	}
 
 
-	e, err := ethtool.NewEthtool()
-	if err != nil {
-		panic(err.Error())
-	}
-	defer e.Close()
-
 	baseLine := 4
 
 	pos := fmt.Sprintf("\033[%d;14H", baseLine)
-	//fmt.Printf("\033[4;14H")
 	fmt.Printf(pos)
-	fmt.Println("RX              TX                  ERRORS")
+	fmt.Println("    RX                                   TX                  ERRORS")
 
 
 	intfs := make([]OneIntf, 0)
@@ -110,93 +122,24 @@ func main() {
 
 	for i:=0; i < numIntfs;  i++ {
 
-		intf := OneIntf{e: e, intf: os.Args[i+1]}
+		intf := OneIntf{intf: os.Args[i+1]}
 		intfs = append(intfs, intf)
-		go intf.mainLoop()
+	}
+	for i:=0; i < numIntfs;  i++ {
+		go intfs[i].mainLoop()
 	}
 
 	for {
 		time.Sleep(1000 * time.Millisecond)
 		line := baseLine+1;
-		pos = fmt.Sprintf("\033[%d;14H", line)
+		pos = fmt.Sprintf("\033[%d;0H", line)
 		fmt.Printf(pos)
 		for i := 0 ; i < numIntfs; i++ {
-			//fmt.Println(intfs[i].display_rx_bytes, intfs[i].display_rx_packets, intfs[i].display_tx_bytes, intfs[i].display_tx_packets, intfs[i].display_rx_drops)
+			fmt.Printf("%s      %sbits [%sPPS]         %sbits [%sPPS]        %s DropsPerSecond                                   .\n", intfs[i].intf, humanRead(8*intfs[i].display_rx_bytes), humanRead(intfs[i].display_rx_packets), humanRead(8*intfs[i].display_tx_bytes), humanRead(intfs[i].display_tx_packets),  humanRead(intfs[i].display_rx_drops))
 		}
 	}
 
 
 	select  {}
-	//GetStats(e, intf)
 
 }
-/*
-func main() {
-	name := flag.String("interface", "", "Interface name")
-	flag.Parse()
-
-	if *name == "" {
-		log.Fatal("interface is not specified")
-	}
-
-	e, err := ethtool.NewEthtool()
-	if err != nil {
-		panic(err.Error())
-	}
-	defer e.Close()
-
-	features, err := e.Features(*name)
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Printf("features: %+v\n", features)
-
-	stats, err := e.Stats(*name)
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Printf("stats: %+v\n", stats)
-
-	busInfo, err := e.BusInfo(*name)
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Printf("bus info: %+v\n", busInfo)
-
-	drvr, err := e.DriverName(*name)
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Printf("driver name: %+v\n", drvr)
-
-	cmdGet, err := e.CmdGetMapped(*name)
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Printf("cmd get: %+v\n", cmdGet)
-
-	msgLvlGet, err := e.MsglvlGet(*name)
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Printf("msg lvl get: %+v\n", msgLvlGet)
-
-	drvInfo, err := e.DriverInfo(*name)
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Printf("drvrinfo: %+v\n", drvInfo)
-
-	permAddr, err := e.PermAddr(*name)
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Printf("permaddr: %+v\n", permAddr)
-
-	eeprom, err := e.ModuleEepromHex(*name)
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Printf("module eeprom: %+v\n", eeprom)
-}
-*/
